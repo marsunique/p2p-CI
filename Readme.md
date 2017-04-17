@@ -1,4 +1,4 @@
-# Peer-to-Peer with Centralized Index (P2P-CI) System for Downloading RFCs
+# Peer-to-Peer with Centralized Index (P2P-CI) System
 Internet protocol standards are defined in documents called “Requests for Comments” (RFCs). RFCs are available for download from the IETF web site (http://www.ietf.org/). Rather than using this centralized server for downloading RFCs, you will build a P2P-CI system in which peers who wish to download an RFC that they do not have in their hard drive, may download it from another active peer who does. All communication among peers or between a peer and the server will take place over TCP. Specifically, the P2P-CI system will operate as follows.
 - There is a centralized server, running on a well-known host and listening on a well-known port, which
 keeps information about the active peers and maintains an index of the RFCs available at each active peer.

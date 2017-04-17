@@ -25,14 +25,25 @@ class ClientNode(object):
         nums = raw_input("Please provide RFC numbers (separated by ','): ")
         nums = nums.split(',')
         rfc_num = []
-        for num in nums:
-            num = num.strip()
-            rfc_num.append(num)
+        for _num in nums:
+            _num = _num.strip()
+            rfc_num.append(_num)
         data = pickle.dumps(['connect', self.UPLOAD_PORT, rfc_num])
         # data = [cmd, upload_port, rfc_num]
         self.mainSocket.send(data)
 
-
+    def queryServer(self, cmd):
+        cmd = cmd.strip()
+        cmd = cmd.split(' ')
+        print cmd
+        if not self.mainSocket:
+            print 'Error. Connect the server first!'
+            return
+        data = pickle.dumps(cmd)
+        self.mainSocket.send(data)
+        # receive query response
+        recv_data = pickle.loads(self.mainSocket.recv(1024))
+        print recv_data
     
     def tcpClose(self):
         self.mainSocket.close()
@@ -53,9 +64,12 @@ class ClientNode(object):
             '''
             if cmd == 'connect':
                 self.connectServer()
+            if 'query' in cmd:
+                self.queryServer(cmd)
             if cmd == 'quit':
                 self.mainSocket.send(pickle.dumps(['quit']))
                 self.tcpClose()
+                print 'Connection terminated'
                 break
 
 

@@ -17,7 +17,7 @@ class ServerNode(object):
         #     print data[0].split(' ')[-1]
         #     data = 'P2P-CI/1.0 505 P2P-CI Version Not Supported\n'
         #     conn.send(data)
-        #     return False
+        
 
         # interpret the method
         cmd = data[0].split(' ')[0]
@@ -103,11 +103,8 @@ class ServerNode(object):
                     # index is empty
                     self.rfc_index.pop(_num)
                     # return True used to close the socket
-                    return True
-
-        # else:
-        #     data = 'P2P-CI/1.0 400 Bad Request\n'
-        #     conn.send(data)
+            return True
+        
         return False
 
 
@@ -123,6 +120,7 @@ class ServerNode(object):
             if isQuit:
                 break
         conn.close()
+
     
     def main(self):
         # create server socket

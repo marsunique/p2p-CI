@@ -3,8 +3,8 @@ import threading
 import pickle
 import random
 import time
-import sys
 import platform
+import os.path
 
 class ClientNode(object):
     def __init__(self, server_name):
@@ -38,13 +38,69 @@ class ClientNode(object):
 
     def uploadConnect(self, conn, addr):
         recv_data = conn.recv(1024)
+        # this is quit command sent to the upload socket
         if recv_data[:4] == 'QUIT':
             conn.close()
+        # this is actual download request
         else:
             print '\nDownload request:'
             print recv_data,
             print 'From', addr
-            conn.sendall(recv_data.upper())
+            '''
+            data format:
+            GET RFC 1 P2P-CI/1.0
+            HOST: MARS-XPS
+            OS: LINUX-3.4.0+-X86_64-WITH-UBUNTU-14.04-TRUSTY
+            '''
+            data = recv_data.split('\n')
+            _rfc_num = data[0].split(' ')[2]
+            _version = data[0].split(' ')[3]
+            _rfc_path = 'rfc%s.txt' % (_rfc_num)
+            if _version != 'P2P-CI/1.0':
+                # bad version
+                conn.sendall('P2P-CI/1.0 505 P2P-CI Version Not Supported\n')
+            elif not os.path.exists(_rfc_path):
+                # file not exists
+                conn.sendall('P2P-CI/1.0 404 Not Found\n')
+            else:
+                # start uploading
+                # format response header
+                line_1 = 'P2P-CI/1.0 200 OK\n'
+                line_2 = 'Data: %s\n' % (time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime()))
+                line_3 = 'OS: %s\n' % (platform.platform())
+                line_4 = 'Last-Modified: %s\n' % (time.strftime("%a, %d %b %Y %H:%M:%S GMT", 
+                                                        time.gmtime(os.path.getmtime(_rfc_path))))
+                line_5 = 'Content-Length: %s\n' % (os.path.getsize(_rfc_path))
+                line_6 = 'Content-Type: text/plain\n'
+                data = line_1 + line_2 + line_3 + line_4 + line_5 + line_6
+                # send response header
+                conn.sendall(data)
+
+                print '\nStart uploading...'
+                time.sleep(1)
+
+                total_length = int(os.path.getsize(_rfc_path))
+                count = 0
+                # open file
+                f = open(_rfc_path, 'r')
+                data = f.read(1024)
+                while data:
+                    count += 1024
+                    # count downloading percentage
+                    percentage = float(count) / total_length
+                    if percentage > 1:
+                        percentage = 100
+                    else:
+                        percentage = int(percentage*100)
+                    print 'Uploading...%d%%' % (percentage)
+                    
+                    conn.send(data)
+                    time.sleep(0.2)
+
+                    data = f.read(1024)
+                f.close()
+                print 'Finish uploading!'
+                print 'Total Length: %s' % (total_length)
             conn.close()
     
     def uploadListen(self):
@@ -61,9 +117,7 @@ class ClientNode(object):
         # wait
         t_uploadConnect.join()
         self.uploadSocket.close()
-        print '\nUpload is closed'
-
-
+        print '\nUpload entry is closed'
 
 
     def downloadPeer(self):
@@ -71,6 +125,7 @@ class ClientNode(object):
         host_name = raw_input("Please provide hostname from which you wish to download: ")
         peer_upload_port = raw_input("Please provide the upload port: ")
         os_info = platform.platform()
+        rfc_path = 'rfc%s.txt' % (rfc_num)
         # prepare data
         line_1 = 'GET RFC %s P2P-CI/1.0\n' % (rfc_num)
         line_2 = 'Host: %s\n' % (host_name)
@@ -81,9 +136,35 @@ class ClientNode(object):
         self.downloadSocket.connect((host_name, int(peer_upload_port)))
         self.downloadSocket.sendall(data)
         print 'Download request is sent!'
+        # receive response header
         recv_data = self.downloadSocket.recv(1024)
-        print '-------Received--------'
         print recv_data
+        # status is 200 OK
+        if recv_data.split('\n')[0].split(' ')[1] == '200':
+            total_length = int(recv_data.split('\n')[4].split(' ')[1])
+            count = 0
+            # open file
+            f = open(rfc_path,'w')
+            print 'Start downloading...'
+            recv_data = self.downloadSocket.recv(1024)
+            while recv_data:
+                count += 1024
+                # count downloading percentage
+                percentage = float(count) / total_length
+                if percentage > 1:
+                    percentage = 100
+                else:
+                    percentage = int(percentage*100)
+                print 'Downloading...%d%%' % (percentage)
+
+                f.write(recv_data)
+                time.sleep(0.2)
+
+                recv_data = self.downloadSocket.recv(1024)
+            f.close()
+            print 'Finish downloading!'
+            print 'Total Length: %s' % (total_length)
+        
         self.downloadSocket.close()
 
 
@@ -185,17 +266,22 @@ class ClientNode(object):
             7. download
                 - this cmd doesn't need to be transmited to server, handled locally
             '''
-            if cmd == 'download':
-                self.downloadPeer()
-            elif cmd == 'connect':
-                if not self.mainSocket:
+            if not self.mainSocket:
+                if cmd == 'connect':
                     self.connectServer()
+                elif cmd == 'download':
+                    self.downloadPeer()
+                elif cmd == 'quit':
+                    self.client_isStop = True
+                    self.quitUploadListen()
+                    print 'Exit Successful'
+                    break
                 else:
-                    print 'You have already connected the server'
-            else:
-                if not self.mainSocket:
                     print 'Error. Connect the server first!'
                     continue
+            else:
+                if cmd == 'connect':
+                    print 'You have already connected the server'
                 elif cmd == 'add':
                     self.addSever()
                 elif cmd == 'query':
@@ -210,12 +296,12 @@ class ClientNode(object):
                     self.quitUploadListen()
                     self.tcpClose()
                     print 'Connection terminated'
+                    print 'Exit Successful'
                     break
+                elif cmd == 'download':
+                    self.downloadPeer()
                 # elif cmd == 'test':
                 #     self.testSever()
-                # elif cmd == 'download':
-                #     self.downloadPeer()
-
                 else:
                     print 'Error. Invalid Command!'
 

@@ -48,15 +48,6 @@ class ServerNode(object):
             # this is not requested by the project doc
             data = pickle.dumps(self.peer_info)
             conn.sendall(data)
-            # else:
-            #     # type 2
-            #     _rfc_num = int(data[1])
-            #     if not _rfc_num in self.rfc_index:
-            #         # rfc number is not stored in the rfc_index
-            #         data = pickle.dumps('RFC not available')
-            #     else: 
-            #         data = pickle.dumps(self.rfc_index[_rfc_num])
-            #     conn.sendall(data)
 
 
         elif cmd == 'LOOKUP':
@@ -102,7 +93,7 @@ class ServerNode(object):
                 if not self.rfc_index[_num]:
                     # index is empty
                     self.rfc_index.pop(_num)
-                    # return True used to close the socket
+            # return True used to close the socket
             return True
         
         return False

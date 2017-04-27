@@ -5,6 +5,7 @@ import random
 import time
 import platform
 import os.path
+import sys
 
 class ClientNode(object):
     def __init__(self, server_name):
@@ -53,6 +54,7 @@ class ClientNode(object):
             OS: LINUX-3.4.0+-X86_64-WITH-UBUNTU-14.04-TRUSTY
             '''
             data = recv_data.split('\n')
+            _command = data[0].split(' ')[0]
             _rfc_num = data[0].split(' ')[2]
             _version = data[0].split(' ')[3]
             _rfc_path = 'rfc%s.txt' % (_rfc_num)
@@ -62,7 +64,7 @@ class ClientNode(object):
             elif not os.path.exists(_rfc_path):
                 # file not exists
                 conn.sendall('P2P-CI/1.0 404 Not Found\n')
-            else:
+            elif _command == 'GET':
                 # start uploading
                 # format response header
                 line_1 = 'P2P-CI/1.0 200 OK\n'
@@ -101,6 +103,9 @@ class ClientNode(object):
                 f.close()
                 print 'Finish uploading!'
                 print 'Total Length: %s' % (total_length)
+            else:
+                # bad request
+                conn.sendall('P2P-CI/1.0 400 Bad Request\n')
             conn.close()
     
     def uploadListen(self):
@@ -117,7 +122,7 @@ class ClientNode(object):
         # wait
         t_uploadConnect.join()
         self.uploadSocket.close()
-        print '\nUpload entry is closed'
+        print '\nUpload service is closed'
 
 
     def downloadPeer(self):
@@ -133,7 +138,11 @@ class ClientNode(object):
         data = line_1 + line_2 + line_3
         # build connection
         self.downloadSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.downloadSocket.connect((host_name, int(peer_upload_port)))
+        try:
+            self.downloadSocket.connect((host_name, int(peer_upload_port)))
+        except BaseException, exc:
+            print "Caught exception: %s" % exc
+            return
         self.downloadSocket.sendall(data)
         print 'Download request is sent!'
         # receive response header
@@ -171,9 +180,12 @@ class ClientNode(object):
     def connectServer(self):
         # create client socket
         self.mainSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.mainSocket.connect((self.SERVER_NAME, self.SERVER_PORT))
+        try:
+            self.mainSocket.connect((self.SERVER_NAME, self.SERVER_PORT))
+        except BaseException, exc:
+            print "Caught exception: %s" % exc
         print 'Server is connected!'
-        data = 'CONNECT %s\n' % (str(self.UPLOAD_PORT))
+        data = 'CONNECT %s P2P-CI/1.0\n' % (str(self.UPLOAD_PORT))
         self.mainSocket.sendall(data)
 
     def addSever(self):
@@ -229,11 +241,16 @@ class ClientNode(object):
         self.mainSocket.sendall(data)
 
     def testSever(self):
-        cmd = raw_input("Choose test type (bad or version): ")
-        if cmd == 'bad':
+        cmd = raw_input("Choose test type (bad1, bad2 or version): ")
+        if cmd == 'bad1':
             data = 'BAD P2P-CI/1.0\n'
-        else:
+        elif cmd == 'bad2':
+            data = 'BAD\n'
+        elif cmd == 'version':
             data = 'BAD P2P-CI/2.0\n'
+        else:
+            print 'Test type not available'
+            return
         self.mainSocket.sendall(data)
         recv_data = self.mainSocket.recv(1024)
         print recv_data
@@ -269,8 +286,6 @@ class ClientNode(object):
             if not self.mainSocket:
                 if cmd == 'connect':
                     self.connectServer()
-                elif cmd == 'download':
-                    self.downloadPeer()
                 elif cmd == 'quit':
                     self.client_isStop = True
                     self.quitUploadListen()
@@ -300,13 +315,17 @@ class ClientNode(object):
                     break
                 elif cmd == 'download':
                     self.downloadPeer()
-                # elif cmd == 'test':
-                #     self.testSever()
+                elif cmd == 'test':
+                    self.testSever()
                 else:
                     print 'Error. Invalid Command!'
 
 
 if __name__ == '__main__':
-    client = ClientNode('localhost')
+    if len(sys.argv) == 2:
+        hostname = sys.argv[1]
+    else:
+        hostname = 'localhost'
+    client = ClientNode(hostname)
     client.main()
 

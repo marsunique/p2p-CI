@@ -12,92 +12,93 @@ class ServerNode(object):
 
     def handleRequest(self, data, conn, addr):
         data = data.split('\n')
-        # check version
-        # if not data[0].split(' ')[-1].strip() == 'P2P-CI/1.0':
-        #     print data[0].split(' ')[-1]
-        #     data = 'P2P-CI/1.0 505 P2P-CI Version Not Supported\n'
-        #     conn.send(data)
-        
-
         # interpret the method
         cmd = data[0].split(' ')[0]
-        if cmd == 'CONNECT':
-            # register peer information
-            _upload_port = int(data[0].split(' ')[1])
-            self.peer_info[addr] = [_upload_port, {}]
-        
-        
-        elif cmd == 'ADD':
-            # add rfc
-            _num = data[0].split(' ')[2]
-            _host = data[1].split(' ')[1]
-            _upload_port = data[2].split(' ')[1]
-            _title = data[3].split(' ')[1]
-            self.rfc_index.setdefault(_num, [])
-            self.rfc_index[_num].append((_host, _upload_port, _title))
-            # updata peer_info, self.peer_info[addr] = [_upload_port, {}]
-            self.peer_info[addr][1][_num] = (_host, _upload_port, _title)
-            # echo
-            data = 'P2P-CI/1.0 200 OK\n'
-            data += 'RFC %s %s %s %s\n' % (_num, _title, _host, _upload_port)
-            conn.sendall(data)
 
-
-        elif cmd == 'QUERY':
-            # send back whole peer information
-            # this is not requested by the project doc
-            data = pickle.dumps(self.peer_info)
-            conn.sendall(data)
-
-
-        elif cmd == 'LOOKUP':
-            # find peers have the specified rfc
-            _num = data[0].split(' ')[2]
-            if not _num in self.rfc_index:
-                _status_code = '404'
-                _phrase = 'Not Found'
-                data = 'P2P-CI/1.0 %s %s\n' % (_status_code, _phrase)
+        if len(data[0].split(' ')) == 1:
+            # data is 'QUERY\n' or 'QUIT\n'
+            if cmd == 'QUERY':
+                data = pickle.dumps(self.peer_info)
+                conn.sendall(data)
+            
+            elif cmd == 'QUIT':
+                _info = self.peer_info.pop(addr)
+                # info = [_upload_port, _rfc_num], _rfc_num is a dictionary
+                for _num in _info[1]:
+                    record = _info[1][_num]
+                    self.rfc_index[_num].remove(record)
+                    if not self.rfc_index[_num]:
+                        # index is empty
+                        self.rfc_index.pop(_num)
+                # return True used to close the socket
+                return True
+            
             else:
-                _status_code = '200'
-                _phrase = 'OK'
-                data = 'P2P-CI/1.0 %s %s\n' % (_status_code, _phrase)
-                for record in self.rfc_index[_num]:
-                    #record = (_host, _upload_port, _title)
-                    data += 'RFC %s %s %s %s\n' % (_num, record[2], record[0], record[1])
-            conn.sendall(data)
-
+                conn.sendall('P2P-CI/1.0 400 Bad Request\n')
         
-        elif cmd == 'LIST':
-            # list all rfc index
-            if not self.rfc_index:
-                _status_code = '404'
-                _phrase = 'Not Found'
-                data = 'P2P-CI/1.0 %s %s\n' % (_status_code, _phrase)
+        else:
+            version = data[0].split(' ')[-1]
+            if version != 'P2P-CI/1.0':
+                # wrong version
+                conn.sendall('P2P-CI/1.0 505 P2P-CI Version Not Supported\n')
+            
             else:
-                _status_code = '200'
-                _phrase = 'OK'
-                data = 'P2P-CI/1.0 %s %s\n' % (_status_code, _phrase)
-                for _num in self.rfc_index:
-                    for record in self.rfc_index[_num]:
-                        #record = (_host, _upload_port, _title)
-                        data += 'RFC %s %s %s %s\n' % (_num, record[2], record[0], record[1])
-            conn.sendall(data)
+                if cmd == 'CONNECT':
+                    # register peer information
+                    _upload_port = int(data[0].split(' ')[1])
+                    self.peer_info[addr] = [_upload_port, {}]
+                
+                elif cmd == 'ADD':
+                    # add rfc
+                    _num = data[0].split(' ')[2]
+                    _host = data[1].split(' ')[1]
+                    _upload_port = data[2].split(' ')[1]
+                    _title = data[3].split(' ')[1]
+                    self.rfc_index.setdefault(_num, [])
+                    self.rfc_index[_num].append((_host, _upload_port, _title))
+                    # updata peer_info, self.peer_info[addr] = [_upload_port, {}]
+                    self.peer_info[addr][1][_num] = (_host, _upload_port, _title)
+                    # echo
+                    data = 'P2P-CI/1.0 200 OK\n'
+                    data += 'RFC %s %s %s %s\n' % (_num, _title, _host, _upload_port)
+                    conn.sendall(data)
 
+                elif cmd == 'LOOKUP':
+                    # find peers have the specified rfc
+                    _num = data[0].split(' ')[2]
+                    if not _num in self.rfc_index:
+                        _status_code = '404'
+                        _phrase = 'Not Found'
+                        data = 'P2P-CI/1.0 %s %s\n' % (_status_code, _phrase)
+                    else:
+                        _status_code = '200'
+                        _phrase = 'OK'
+                        data = 'P2P-CI/1.0 %s %s\n' % (_status_code, _phrase)
+                        for record in self.rfc_index[_num]:
+                            #record = (_host, _upload_port, _title)
+                            data += 'RFC %s %s %s %s\n' % (_num, record[2], record[0], record[1])
+                    conn.sendall(data)
 
-        elif cmd == 'QUIT':
-            _info = self.peer_info.pop(addr)
-            # info = [_upload_port, _rfc_num], _rfc_num is a dictionary
-            for _num in _info[1]:
-                record = _info[1][_num]
-                self.rfc_index[_num].remove(record)
-                if not self.rfc_index[_num]:
-                    # index is empty
-                    self.rfc_index.pop(_num)
-            # return True used to close the socket
-            return True
-        
+                elif cmd == 'LIST':
+                    # list all rfc index
+                    if not self.rfc_index:
+                        _status_code = '404'
+                        _phrase = 'Not Found'
+                        data = 'P2P-CI/1.0 %s %s\n' % (_status_code, _phrase)
+                    else:
+                        _status_code = '200'
+                        _phrase = 'OK'
+                        data = 'P2P-CI/1.0 %s %s\n' % (_status_code, _phrase)
+                        for _num in self.rfc_index:
+                            for record in self.rfc_index[_num]:
+                                #record = (_host, _upload_port, _title)
+                                data += 'RFC %s %s %s %s\n' % (_num, record[2], record[0], record[1])
+                    conn.sendall(data)
+                
+                else:
+                    conn.sendall('P2P-CI/1.0 400 Bad Request\n')
+        # return False anyway used to keep the socket alive
         return False
-
 
 
     def connectClient(self, conn, addr):
